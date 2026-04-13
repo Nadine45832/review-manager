@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Review Manager</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+ 
+    :root {
+      --blue:    #007AFF;
+      --green:   #34C759;
+      --red:     #FF3B30;
+      --orange:  #FF9500;
+      --purple:  #AF52DE;
+      --gray6:   #F2F2F7;
+      --gray5:   #E5E5EA;
+      --gray4:   #C7C7CC;
+      --gray3:   #AEAEB2;
+      --gray2:   #636366;
+      --gray1:   #3A3A3C;
+      --label:   #000000;
+      --surface: #ffffff;
+      --r-sm:    10px;
+      --r-md:    14px;
+      --r-lg:    20px;
+    }
+ 
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --gray6:   #000000;
+        --gray5:   #1C1C1E;
+        --gray4:   #2C2C2E;
+        --gray3:   #636366;
+        --gray2:   #AEAEB2;
+        --gray1:   #D1D1D6;
+        --label:   #FFFFFF;
+        --surface: #1C1C1E;
+      }
+    }
+ 
+    body {
+      font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+      background: var(--gray6);
+      color: var(--label);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+ 
+    /* ── sticky nav ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 24px;
+      background: rgba(242,242,247,.9);
+      backdrop-filter: saturate(180%) blur(24px);
+      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      border-bottom: 0.5px solid var(--gray5);
+    }
+    @media (prefers-color-scheme: dark) { nav { background: rgba(0,0,0,.85); } }
+ 
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: var(--blue);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .brand-icon svg { width: 17px; height: 17px; }
+    .brand-name { font-size: 16px; font-weight: 600; letter-spacing: -.3px; }
+    .brand-sub  { font-size: 11px; color: var(--gray3); }
+ 
+    .status-chip {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--gray5);
+      border-radius: 100px; padding: 5px 13px;
+      font-size: 12px; font-weight: 500; color: var(--gray2);
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gray4); transition: background .4s; }
+    .dot.online  { background: var(--green); box-shadow: 0 0 0 2.5px rgba(52,199,89,.2); }
+    .dot.offline { background: var(--red); }
+ 
+    /* ── main ── */
+    main { max-width: 700px; margin: 0 auto; padding: 32px 20px 80px; }
+ 
+    .hero { margin-bottom: 28px; }
+    .hero h1 {
+      font-size: 34px; font-weight: 700; letter-spacing: -.8px; line-height: 1.1;
+      margin-bottom: 8px;
+    }
+    .hero p { font-size: 15px; color: var(--gray2); line-height: 1.55; }
+ 
+    /* ── card (grouped list) ── */
+    .card {
+      background: var(--surface);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .card-hd { padding: 14px 18px 0; }
+    .card-hd-label {
+      font-size: 12px; font-weight: 600; letter-spacing: .05em;
+      text-transform: uppercase; color: var(--gray3);
+    }
+ 
+    /* ── upload zone ── */
+    .upload-zone {
+      margin: 14px 18px 18px;
+      border: 1.5px dashed var(--gray4);
+      border-radius: var(--r-md);
+      padding: 30px 20px;
+      text-align: center;
+      cursor: pointer;
+      position: relative;
+      transition: border-color .2s, background .2s;
+    }
+    .upload-zone:hover,
+    .upload-zone.dragover { border-color: var(--blue); background: rgba(0,122,255,.03); }
+    .upload-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+    }
+    .uz-icon {
+      width: 50px; height: 50px; border-radius: 14px;
+      background: rgba(0,122,255,.1);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 13px;
+    }
+    .uz-icon svg { width: 24px; height: 24px; }
+    .uz-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .uz-hint  { font-size: 13px; color: var(--gray3); }
+    .uz-hint b { color: var(--blue); font-weight: 500; }
+    .uz-col {
+      display: inline-block; margin-top: 8px;
+      background: rgba(0,0,0,.05); border-radius: 5px;
+      padding: 2px 8px; font-size: 12px; font-family: 'SF Mono', monospace;
+      color: var(--gray2);
+    }
+    @media (prefers-color-scheme: dark) { .uz-col { background: rgba(255,255,255,.08); } }
+    #file-chosen {
+      margin-top: 12px; font-size: 13px; color: var(--green); font-weight: 500;
+      display: flex; align-items: center; justify-content: center; gap: 5px; min-height: 18px;
+    }
+ 
+    /* ── list rows ── */
+    .sep { height: 0.5px; background: var(--gray5); margin: 0 18px; }
+    .list-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 13px 18px; gap: 12px;
+    }
+    .lrow-l { display: flex; align-items: center; gap: 12px; }
+    .lrow-icon {
+      width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .lrow-icon svg { width: 16px; height: 16px; }
+    .ri-blue   { background: rgba(0,122,255,.1); }
+    .ri-orange { background: rgba(255,149,0,.1); }
+    .ri-purple { background: rgba(175,82,222,.1); }
+    .lrow-title  { font-size: 15px; font-weight: 500; }
+    .lrow-sub    { font-size: 12px; color: var(--gray3); margin-top: 1px; }
+ 
+    select {
+      background: var(--gray5);
+      border: none; border-radius: 8px;
+      color: var(--label); font-family: inherit;
+      font-size: 14px; font-weight: 500;
+      padding: 6px 28px 6px 10px; cursor: pointer;
+      appearance: none; -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23AEAEB2'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 9px center;
+    }
+    select:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
+ 
+    /* ── CTA button ── */
+    .btn-cta {
+      width: 100%; background: var(--blue); color: #fff;
+      border: none; border-radius: var(--r-sm);
+      font-family: inherit; font-size: 17px; font-weight: 600;
+      letter-spacing: -.2px; padding: 15px;
+      cursor: pointer; margin-bottom: 14px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: opacity .15s, transform .12s;
+    }
+    .btn-cta:hover   { opacity: .88; }
+    .btn-cta:active  { transform: scale(.97); opacity: .84; }
+    .btn-cta:disabled { opacity: .35; cursor: not-allowed; }
+ 
+    .spinner {
+      display: none; width: 18px; height: 18px;
+      border: 2.5px solid rgba(255,255,255,.3);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin .75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+ 
+    /* ── step pills ── */
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+    .sp {
+      background: var(--surface); border-radius: var(--r-sm);
+      border: 0.5px solid var(--gray5); padding: 10px 8px; text-align: center;
+      transition: border-color .3s;
+    }
+    .sp.active { border-color: var(--blue); }
+    .sp.done   { border-color: var(--green); }
+    .sp-n { font-size: 18px; font-weight: 700; display: block; color: var(--gray4); transition: color .3s; }
+    .sp.active .sp-n { color: var(--blue); }
+    .sp.done   .sp-n { color: var(--green); }
+    .sp-name { font-size: 10px; color: var(--gray3); display: block; margin-top: 1px; }
+ 
+    /* ── error ── */
+    .err {
+      display: none; background: rgba(255,59,48,.08);
+      border: 0.5px solid rgba(255,59,48,.35);
+      border-radius: var(--r-sm); padding: 13px 16px;
+      font-size: 14px; color: var(--red); margin-bottom: 14px;
+    }
+ 
+    /* ── results ── */
+    #results { display: none; }
+    .section-title { font-size: 22px; font-weight: 700; letter-spacing: -.5px; margin-bottom: 14px; }
+ 
+    /* stat row */
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+    .stat-card { background: var(--surface); border-radius: var(--r-md); padding: 16px; text-align: center; }
+    .stat-n { font-size: 30px; font-weight: 700; letter-spacing: -1.5px; }
+    .stat-l { font-size: 12px; color: var(--gray3); margin-top: 2px; }
+    .c-blue   { color: var(--blue); }
+    .c-green  { color: var(--green); }
+    .c-red    { color: var(--red); }
+ 
+    /* sentiment bar */
+    .sent-card { background: var(--surface); border-radius: var(--r-lg); overflow: hidden; margin-bottom: 16px; }
+    .sent-hd { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 10px; }
+    .sent-title { font-size: 15px; font-weight: 600; }
+    .sent-note  { font-size: 12px; color: var(--gray3); }
+    .bar-track { height: 8px; margin: 0 18px 16px; border-radius: 100px; background: var(--gray5); display: flex; overflow: hidden; }
+    .bs { height: 100%; transition: width .7s cubic-bezier(.4,0,.2,1); }
+    .bs-pos { background: var(--green); }
+    .bs-neg { background: var(--red); }
+    .bs-neu { background: var(--orange); }
+    .bs-mix { background: var(--gray4); }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 0 18px 16px; }
+    .li { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--gray2); }
+    .ld { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+ 
+    /* key phrases */
+    .kp-card { background: var(--surface); border-radius: var(--r-lg); padding: 16px 18px; margin-bottom: 16px; }
+    .kp-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+    .kp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .kp-chip {
+      background: var(--gray5); border-radius: 100px;
+      padding: 5px 13px; font-size: 13px; font-weight: 500;
+    }
+ 
+    /* audio */
+    .audio-card { background: var(--surface); border-radius: var(--r-lg); overflow: hidden; margin-bottom: 16px; }
+    .audio-inner { padding: 18px; display: flex; align-items: center; gap: 16px; }
+    .play-btn {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: var(--blue); border: none; cursor: pointer; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity .15s, transform .1s;
+    }
+    .play-btn:hover  { opacity: .9; }
+    .play-btn:active { transform: scale(.94); }
+    .play-btn svg    { width: 19px; height: 19px; }
+    .audio-title  { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+    .audio-detail { font-size: 12px; color: var(--gray3); }
+    audio { display: none; }
+ 
+    /* review list */
+    .reviews-card { background: var(--surface); border-radius: var(--r-lg); overflow: hidden; }
+    .review-item { padding: 14px 18px; }
+    .review-item + .review-item { border-top: 0.5px solid var(--gray5); }
+    .ri-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+    .ri-idx { font-size: 12px; font-weight: 600; color: var(--gray3); }
+    .sbadge {
+      font-size: 11px; font-weight: 600; border-radius: 100px;
+      padding: 3px 10px; text-transform: uppercase; letter-spacing: .04em; flex-shrink: 0;
+    }
+    .s-POSITIVE { background: rgba(52,199,89,.12);  color: #1a7a3a; }
+    .s-NEGATIVE { background: rgba(255,59,48,.12);  color: #c0291e; }
+    .s-NEUTRAL  { background: rgba(255,149,0,.12);  color: #8a5a00; }
+    .s-MIXED    { background: rgba(175,82,222,.12); color: #6b2f9a; }
+    @media (prefers-color-scheme: dark) {
+      .s-POSITIVE { color: var(--green); }
+      .s-NEGATIVE { color: var(--red); }
+      .s-NEUTRAL  { color: var(--orange); }
+      .s-MIXED    { color: #BF5AF2; }
+    }
+    .ri-original   { font-size: 14px; line-height: 1.55; margin-bottom: 4px; }
+    .ri-translated { font-size: 13px; color: var(--gray2); font-style: italic; line-height: 1.5; }
+    .ri-lang       { font-size: 11px; color: var(--blue); font-weight: 500; margin-top: 4px; }
+  </style>
+</head>
+<body>
+ 
+<!-- nav -->
+<nav>
+  <div class="brand">
+    <div class="brand-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+    </div>
+    <div>
+      <div class="brand-name">Review Manager</div>
+      <div class="brand-sub">Hotel Sentiment Analysis</div>
+    </div>
+  </div>
+  <div class="status-chip">
+    <div class="dot" id="status-dot"></div>
+    <span id="status-text">Checking…</span>
+  </div>
+</nav>
+ 
+<main>
+ 
+  <!-- hero -->
+  <div class="hero">
+    <h1>Analyze Guest<br>Reviews</h1>
+    <p>Upload a CSV of hotel reviews. The system detects languages, translates non-English entries, runs sentiment analysis, and generates an audio summary.</p>
+  </div>
+ 
+  <!-- input card -->
+  <div class="card">
+    <div class="card-hd"><span class="card-hd-label">CSV File</span></div>
+ 
+    <div class="upload-zone" id="drop-zone">
+      <input type="file" id="csv-file" accept=".csv,text/csv" onchange="onFileSelected(this)" />
+      <div class="uz-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#007AFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="12" y1="18" x2="12" y2="12"/>
+          <line x1="9" y1="15" x2="15" y2="15"/>
+        </svg>
+      </div>
+      <div class="uz-title">Drop your CSV here</div>
+      <div class="uz-hint">or <b>browse</b> to choose a file</div>
+      <div class="uz-hint" style="margin-top:5px">
+        Expected column: <span class="uz-col">review_text</span>
+      </div>
+      <div id="file-chosen"></div>
+    </div>
+ 
+    <div class="sep"></div>
+ 
+    <div class="list-row">
+      <div class="lrow-l">
+        <div class="lrow-icon ri-orange">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#FF9500" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="lrow-title">Translate to</div>
+          <div class="lrow-sub">Non-English reviews are auto-translated</div>
+        </div>
+      </div>
+      <select id="target-lang">
+        <option value="en">English</option>
+        <option value="fr">French</option>
+        <option value="es">Spanish</option>
+        <option value="de">German</option>
+        <option value="it">Italian</option>
+        <option value="pt">Portuguese</option>
+      </select>
+    </div>
+ 
+    <div class="sep"></div>
+ 
+    <div class="list-row">
+      <div class="lrow-l">
+        <div class="lrow-icon ri-purple">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#AF52DE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </div>
+        <div>
+          <div class="lrow-title">Audio summary voice</div>
+          <div class="lrow-sub">Spoken results via AWS Polly</div>
+        </div>
+      </div>
+      <select id="audio-lang">
+        <option value="en">English</option>
+        <option value="fr">French</option>
+        <option value="es">Spanish</option>
+      </select>
+    </div>
+  </div>
+ 
+  <!-- CTA -->
+  <button class="btn-cta" id="run-btn" onclick="runPipeline()">
+    <span class="spinner" id="spinner"></span>
+    <span id="btn-label">Analyze Reviews</span>
+  </button>
+ 
+  <!-- steps -->
+  <div class="steps">
+    <div class="sp" id="step-1"><span class="sp-n">1</span><span class="sp-name">Upload</span></div>
+    <div class="sp" id="step-2"><span class="sp-n">2</span><span class="sp-name">Translate</span></div>
+    <div class="sp" id="step-3"><span class="sp-n">3</span><span class="sp-name">Analyze</span></div>
+    <div class="sp" id="step-4"><span class="sp-n">4</span><span class="sp-name">Audio</span></div>
+  </div>
+ 
+  <div class="err" id="err-box"></div>
+ 
+  <!-- RESULTS -->
+  <div id="results">
+ 
+    <div class="section-title">Results</div>
+ 
+    <div class="stats">
+      <div class="stat-card"><div class="stat-n c-blue"  id="r-total">0</div><div class="stat-l">Total reviews</div></div>
+      <div class="stat-card"><div class="stat-n c-green" id="r-pos">0</div><div class="stat-l">Positive</div></div>
+      <div class="stat-card"><div class="stat-n c-red"   id="r-neg">0</div><div class="stat-l">Negative</div></div>
+    </div>
+ 
+    <div class="sent-card">
+      <div class="sent-hd">
+        <span class="sent-title">Sentiment breakdown</span>
+        <span class="sent-note" id="r-trans-note"></span>
+      </div>
+      <div class="bar-track">
+        <div class="bs bs-pos" id="bp" style="width:0%"></div>
+        <div class="bs bs-neg" id="bn" style="width:0%"></div>
+        <div class="bs bs-neu" id="bnu" style="width:0%"></div>
+        <div class="bs bs-mix" id="bm" style="width:0%"></div>
+      </div>
+      <div class="legend">
+        <div class="li"><div class="ld" style="background:var(--green)"></div><span id="leg-pos">Positive 0%</span></div>
+        <div class="li"><div class="ld" style="background:var(--red)"></div><span id="leg-neg">Negative 0%</span></div>
+        <div class="li"><div class="ld" style="background:var(--orange)"></div><span id="leg-neu">Neutral 0%</span></div>
+        <div class="li"><div class="ld" style="background:var(--gray4)"></div><span id="leg-mix">Mixed 0%</span></div>
+      </div>
+    </div>
+ 
+    <div class="kp-card" id="kp-card" style="display:none">
+      <div class="kp-title">Top key phrases</div>
+      <div class="kp-chips" id="kp-chips"></div>
+    </div>
+ 
+    <div class="audio-card" id="audio-card" style="display:none">
+      <div class="audio-inner">
+        <button class="play-btn" id="play-btn" onclick="toggleAudio()">
+          <svg id="play-icon" viewBox="0 0 24 24" fill="#fff"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        <div>
+          <div class="audio-title">Audio summary</div>
+          <div class="audio-detail" id="audio-detail">Tap to play the spoken analysis</div>
+        </div>
+      </div>
+      <audio id="audio-player" onended="onAudioEnded()"></audio>
+    </div>
+ 
+    <div class="reviews-card" id="review-list"></div>
+ 
+  </div><!-- /results -->
+ 
+</main>
+ 
+<script>
+const SERVER = window.location.origin;
+let audioPlaying = false;
+ 
+/* server status */
+async function checkServer() {
+  try {
+    const r = await fetch(SERVER + "/");
+    if (r.ok) { setStatus(true); } else setStatus(false);
+  } catch { setStatus(false); }
+}
+function setStatus(ok) {
+  document.getElementById("status-dot").className = "dot " + (ok ? "online" : "offline");
+  document.getElementById("status-text").textContent = ok ? "Online" : "Offline";
+}
+ 
+/* file selection */
+function onFileSelected(inp) {
+  const el = document.getElementById("file-chosen");
+  el.innerHTML = inp.files.length
+    ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34C759" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> ${inp.files[0].name}`
+    : "";
+}
+ 
+/* CSV parser */
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (!lines.length) return [];
+  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g,"").toLowerCase());
+  const col = headers.findIndex(h =>
+    ["review_text","review","text","comment","feedback","body"].includes(h)
+  );
+  if (col === -1)
+    throw new Error('No review column found. Expected a column named "review_text", "review", "text", "comment", or "feedback".');
+  return lines.slice(1).map(l => {
+    const cells = csvRow(l);
+    return cells[col] ? cells[col].trim().replace(/^"|"$/g,"") : null;
+  }).filter(Boolean);
+}
+ 
+function csvRow(line) {
+  const res = []; let cur = ""; let q = false;
+  for (const ch of line) {
+    if (ch === '"') { q = !q; }
+    else if (ch === "," && !q) { res.push(cur); cur = ""; }
+    else { cur += ch; }
+  }
+  res.push(cur); return res;
+}
+ 
+/* step helpers */
+function setStep(n, s) {
+  const el = document.getElementById("step-" + n);
+  if (el) el.className = "sp " + s;
+}
+function resetSteps() { [1,2,3,4].forEach(n => setStep(n,"")); }
+ 
+function setLoading(on) {
+  document.getElementById("run-btn").disabled = on;
+  document.getElementById("spinner").style.display = on ? "inline-block" : "none";
+  document.getElementById("btn-label").textContent = on ? "Processing…" : "Analyze Reviews";
+}
+ 
+function showErr(msg) {
+  const el = document.getElementById("err-box");
+  el.textContent = msg; el.style.display = "block";
+}
+function clearErr() { document.getElementById("err-box").style.display = "none"; }
+ 
+/* ── PIPELINE ── */
+async function runPipeline() {
+  clearErr();
+  document.getElementById("results").style.display = "none";
+  resetSteps();
+ 
+  const fileInput  = document.getElementById("csv-file");
+  const targetLang = document.getElementById("target-lang").value;
+  const audioLang  = document.getElementById("audio-lang").value;
+ 
+  if (!fileInput.files.length) { showErr("Please select a CSV file first."); return; }
+ 
+  setLoading(true);
+ 
+  try {
+    /* 1. parse CSV locally */
+    setStep(1,"active");
+    const text = await fileInput.files[0].text();
+    let reviews;
+    try { reviews = parseCSV(text); }
+    catch(e) { throw new Error(e.message); }
+    if (!reviews.length) throw new Error("No reviews found in the CSV file.");
+    setStep(1,"done");
+ 
+    /* 2. upload + translate */
+    setStep(2,"active");
+    const upRes = await api("/reviews/upload", { reviews, target_lang: targetLang });
+    // returns { batch_id, translated_reviews: [{original, translated, source_language, was_translated}] }
+    setStep(2,"done");
+ 
+    /* 3. sentiment analysis */
+    setStep(3,"active");
+    const anRes = await api("/reviews/" + upRes.batch_id + "/analyze", {});
+    // returns { batch_id, summary:{total,positive,negative,neutral,mixed}, results:[{text,sentiment,key_phrases}], key_phrases:[] }
+    setStep(3,"done");
+ 
+    /* 4. audio summary */
+    setStep(4,"active");
+    let audioUrl = null;
+    try {
+      const auRes = await api("/reviews/" + upRes.batch_id + "/audio-summary", { language_code: audioLang });
+      audioUrl = auRes.audio_url || null;
+    } catch(e) { /* audio is optional — don't block results */ }
+    setStep(4,"done");
+ 
+    renderResults(anRes, upRes.translated_reviews || [], audioUrl);
+ 
+  } catch(err) {
+    showErr("Error: " + err.message);
+    resetSteps();
+  } finally {
+    setLoading(false);
+  }
+}
+ 
+async function api(path, body) {
+  const r = await fetch(SERVER + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) {
+    let msg = "Request failed";
+    try { msg = (await r.json()).error || msg; } catch {}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+ 
+/* ── RENDER ── */
+function renderResults(data, translated, audioUrl) {
+  const { summary, results, key_phrases } = data;
+  const total = summary.total || 1;
+  const pct = v => Math.round((v / total) * 100);
+ 
+  document.getElementById("r-total").textContent = summary.total;
+  document.getElementById("r-pos").textContent   = summary.positive;
+  document.getElementById("r-neg").textContent   = summary.negative;
+ 
+  const posP = pct(summary.positive), negP = pct(summary.negative),
+        neuP  = pct(summary.neutral),  mixP = pct(summary.mixed);
+ 
+  setTimeout(() => {
+    document.getElementById("bp").style.width  = posP + "%";
+    document.getElementById("bn").style.width  = negP + "%";
+    document.getElementById("bnu").style.width = neuP + "%";
+    document.getElementById("bm").style.width  = mixP + "%";
+  }, 80);
+ 
+  document.getElementById("leg-pos").textContent = `Positive ${posP}%`;
+  document.getElementById("leg-neg").textContent = `Negative ${negP}%`;
+  document.getElementById("leg-neu").textContent = `Neutral ${neuP}%`;
+  document.getElementById("leg-mix").textContent = `Mixed ${mixP}%`;
+ 
+  const transCount = translated.filter(r => r.was_translated).length;
+  document.getElementById("r-trans-note").textContent =
+    transCount > 0 ? `${transCount} translated` : "";
+ 
+  /* key phrases */
+  const kpCard = document.getElementById("kp-card");
+  if (key_phrases && key_phrases.length) {
+    document.getElementById("kp-chips").innerHTML =
+      key_phrases.slice(0,20).map(p => `<span class="kp-chip">${esc(p)}</span>`).join("");
+    kpCard.style.display = "block";
+  } else { kpCard.style.display = "none"; }
+ 
+  /* audio */
+  const audioCard = document.getElementById("audio-card");
+  if (audioUrl) {
+    document.getElementById("audio-player").src = audioUrl;
+    document.getElementById("audio-detail").textContent = "Tap to play the spoken analysis";
+    audioCard.style.display = "block";
+  } else { audioCard.style.display = "none"; }
+ 
+  /* review list */
+  document.getElementById("review-list").innerHTML =
+    (results || []).map((r, i) => {
+      const t = translated[i] || {};
+      const showTrans = t.was_translated && t.translated;
+      return `
+        <div class="review-item">
+          <div class="ri-top">
+            <span class="ri-idx">#${i+1}</span>
+            <span class="sbadge s-${r.sentiment}">${r.sentiment}</span>
+          </div>
+          <div class="ri-original">${esc(t.original || r.text || "")}</div>
+          ${showTrans ? `<div class="ri-translated">${esc(t.translated)}</div>` : ""}
+          ${t.source_language && t.source_language !== "en"
+            ? `<div class="ri-lang">${t.source_language.toUpperCase()}</div>` : ""}
+        </div>`;
+    }).join("");
+ 
+  const res = document.getElementById("results");
+  res.style.display = "block";
+  res.scrollIntoView({ behavior: "smooth" });
+}
+ 
+function esc(s) {
+  return String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+ 
+/* audio controls */
+function toggleAudio() {
+  const a = document.getElementById("audio-player");
+  if (audioPlaying) { a.pause(); setIcon(false); audioPlaying = false; }
+  else              { a.play();  setIcon(true);  audioPlaying = true; }
+}
+function onAudioEnded() { audioPlaying = false; setIcon(false); }
+function setIcon(playing) {
+  document.getElementById("play-icon").outerHTML = playing
+    ? `<svg id="play-icon" viewBox="0 0 24 24" fill="#fff"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`
+    : `<svg id="play-icon" viewBox="0 0 24 24" fill="#fff"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+}
+
+const zone = document.getElementById("drop-zone");
+zone.addEventListener("dragover",  e => { e.preventDefault(); zone.classList.add("dragover"); });
+zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
+zone.addEventListener("drop", e => {
+  e.preventDefault(); zone.classList.remove("dragover");
+  if (e.dataTransfer.files.length) {
+    document.getElementById("csv-file").files = e.dataTransfer.files;
+    onFileSelected(document.getElementById("csv-file"));
+  }
+});
+ 
+checkServer();
+</script>
+</body>
+</html>
