@@ -1,4 +1,4 @@
-# review-manager# Review Manager
+# Review Manager
 
 Review Manager is a Chalice-based web app for hotel review processing.
 
@@ -27,6 +27,7 @@ Supported CSV header names include:
 - Amazon Comprehend
 - Amazon Polly
 - Amazon S3
+- Amazon DynamoDB (optional persistence for review batches)
 
 ## How to run locally
 
@@ -67,6 +68,7 @@ AWS_SECRET_ACCESS_KEY=your_secret_key
 AWS_SESSION_TOKEN=optional_if_needed
 S3_BUCKET_NAME=your-s3-bucket-name
 DEFAULT_TARGET_LANG=en
+DDB_TABLE_NAME=hotel-review
 ```
 
 Your S3 bucket must already exist, and your AWS user/role must have permission to use:
@@ -74,8 +76,33 @@ Your S3 bucket must already exist, and your AWS user/role must have permission t
 - Translate
 - Comprehend
 - Polly
+- DynamoDB if you want batch persistence after restarts
 
-### 5. Run the app
+### 5. Optional DynamoDB setup
+
+If you want uploaded batches to persist after the local server restarts, create a DynamoDB table with:
+
+- Table name: `hotel-review` (or any name you prefer)
+- Partition key: `id`
+- Partition key type: `String`
+- Region: the same AWS region you use in `AWS_REGION`
+
+Then set the same table name in your `.env`:
+
+```env
+DDB_TABLE_NAME=hotel-review (or the name you used)
+```
+
+When DynamoDB is configured, the app stores:
+
+- batch metadata
+- original and translated review text
+- sentiment/key phrase analysis results
+- audio summary metadata
+
+If `DDB_TABLE_NAME` is not set, the app still works and falls back to in-memory batch storage.
+
+### 6. Run the app
 
 ```bash
 chalice local
@@ -114,6 +141,6 @@ http://127.0.0.1:8000/ui
 
 ## Notes
 
-- Batch data is stored in memory in the current version. If the server restarts, uploaded batches are lost.
-- For production use, move batch storage to DynamoDB or another persistent database.
+- Batch data is stored in memory by default.
+- If DynamoDB is configured, the app also stores batches there so they survive server restarts.
 - The frontend now sends the CSV file to the backend, and the backend reads and parses it.

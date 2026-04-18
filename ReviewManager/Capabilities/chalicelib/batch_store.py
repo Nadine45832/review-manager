@@ -1,10 +1,24 @@
 import logging
+from decimal import Decimal
 
 from botocore.exceptions import BotoCoreError, ClientError
 from chalicelib.aws_client_factory import aws_resource
 
 
 logger = logging.getLogger(__name__)
+
+
+def _to_dynamodb_value(value):
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, list):
+        return [_to_dynamodb_value(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _to_dynamodb_value(item)
+            for key, item in value.items()
+        }
+    return value
 
 
 class BatchStore:
@@ -14,7 +28,7 @@ class BatchStore:
         self.table = self.dynamodb.Table(table_name)
 
     def save_batch(self, batch: dict) -> None:
-        self.table.put_item(Item=batch)
+        self.table.put_item(Item=_to_dynamodb_value(batch))
 
     def get_batch(self, batch_id: str) -> dict | None:
         response = self.table.get_item(Key={"id": batch_id})
@@ -25,14 +39,18 @@ class BatchStore:
             Key={"id": batch_id},
             UpdateExpression="SET #analysis = :analysis",
             ExpressionAttributeNames={"#analysis": "analysis"},
-            ExpressionAttributeValues={":analysis": analysis},
+            ExpressionAttributeValues={
+                ":analysis": _to_dynamodb_value(analysis)
+            },
         )
 
     def update_audio_summary(self, batch_id: str, audio_summary: dict) -> None:
         self.table.update_item(
             Key={"id": batch_id},
             UpdateExpression="SET audio_summary = :audio_summary",
-            ExpressionAttributeValues={":audio_summary": audio_summary},
+            ExpressionAttributeValues={
+                ":audio_summary": _to_dynamodb_value(audio_summary)
+            },
         )
 
     def is_available(self) -> bool:
