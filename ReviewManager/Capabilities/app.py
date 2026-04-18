@@ -9,18 +9,20 @@ from typing import Any, Dict, List
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+from dotenv import load_dotenv
+load_dotenv()
+
+from chalicelib.aws_client_factory import aws_client
+from chalicelib.batch_store import BatchStore
 from chalice import Chalice, Response
 from chalicelib.storage_service import StorageService
 from chalicelib.translation_service import TranslationService
-from dotenv import load_dotenv
 from utils.helpers import (
     extract_reviews_from_csv, error_response,
     POLLY_VOICES, build_audio_summary_text,
     normalize_lang_code, analyze_text,
     prepare_review_record
 )
-
-load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,14 +33,102 @@ app.debug = True
 BUCKET_NAME = os.environ.get("S3_BUCKET_NAME", "review-manager-bucket")
 DEFAULT_TARGET_LANG = os.environ.get("DEFAULT_TARGET_LANG", "en")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+DDB_TABLE_NAME = os.environ.get("DDB_TABLE_NAME", "").strip()
 
 storage_service = StorageService(BUCKET_NAME)
 translation_service = TranslationService()
-polly_client = boto3.client("polly", region_name=AWS_REGION)
+polly_client = aws_client("polly", region_name=AWS_REGION)
+batch_store = BatchStore(DDB_TABLE_NAME, AWS_REGION) if DDB_TABLE_NAME else None
 
 # Simple in-memory store for the current runtime.
 # Good for local/dev use. For production, move this to DynamoDB or another DB.
 BATCHES: Dict[str, Dict[str, Any]] = {}
+
+# Optional DynamoDB persistence setup:
+# 1. Create a DynamoDB table and set its partition key to "id" (String).
+# 2. Add DDB_TABLE_NAME to your .env file with that table name.
+# 3. Make sure your AWS credentials/role can call GetItem, PutItem, and UpdateItem.
+# 4. Once that env var is present, the app will keep using BATCHES and will also
+#    mirror batch data into DynamoDB so batches survive server restarts.
+#
+# This keeps the current in-memory behavior in place and adds DynamoDB as an
+# extra persistence layer instead of replacing what the app already does.
+#
+# AWS credential loading note:
+# This app now builds its AWS clients from the values in this folder's .env
+# file when AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are present there. That
+# lets local development use the project .env instead of relying on
+# ~/.aws/credentials.
+
+
+def persist_batch(batch: Dict[str, Any]) -> None:
+    BATCHES[batch["id"]] = batch
+    if not batch_store:
+        return
+
+    try:
+        batch_store.save_batch(batch)
+    except (ClientError, BotoCoreError):
+        logger.exception(
+            "Failed to persist batch %s to DynamoDB; continuing with memory store.",
+            batch["id"],
+        )
+
+
+def load_batch(batch_id: str) -> Dict[str, Any] | None:
+    batch = BATCHES.get(batch_id)
+    if batch:
+        return batch
+
+    if not batch_store:
+        return None
+
+    try:
+        batch = batch_store.get_batch(batch_id)
+    except (ClientError, BotoCoreError):
+        logger.exception(
+            "Failed to load batch %s from DynamoDB; memory store has no copy.",
+            batch_id,
+        )
+        return None
+
+    if batch:
+        BATCHES[batch_id] = batch
+    return batch
+
+
+def persist_analysis(batch_id: str, analysis: Dict[str, Any]) -> None:
+    batch = BATCHES.get(batch_id)
+    if batch:
+        batch["analysis"] = analysis
+
+    if not batch_store:
+        return
+
+    try:
+        batch_store.update_analysis(batch_id, analysis)
+    except (ClientError, BotoCoreError):
+        logger.exception(
+            "Failed to store analysis for %s in DynamoDB; continuing with memory store.",
+            batch_id,
+        )
+
+
+def persist_audio_summary(batch_id: str, audio_summary: Dict[str, Any]) -> None:
+    batch = BATCHES.get(batch_id)
+    if batch:
+        batch["audio_summary"] = audio_summary
+
+    if not batch_store:
+        return
+
+    try:
+        batch_store.update_audio_summary(batch_id, audio_summary)
+    except (ClientError, BotoCoreError):
+        logger.exception(
+            "Failed to store audio summary for %s in DynamoDB; continuing with memory store.",
+            batch_id,
+        )
 
 
 @app.route("/ui", methods=["GET"])
@@ -114,13 +204,14 @@ def upload_reviews():
         prepare_review_record(text, target_lang) for text in reviews]
     batch_id = f"batch-{uuid.uuid4().hex}"
 
-    BATCHES[batch_id] = {
+    batch = {
         "id": batch_id,
         "filename": original_filename,
         "target_lang": target_lang,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "translated_reviews": translated_reviews,
     }
+    persist_batch(batch)
 
     logger.info(
         "Created batch %s with %s reviews", batch_id, len(translated_reviews))
@@ -137,7 +228,7 @@ def upload_reviews():
     content_types=["application/json"]
 )
 def analyze_reviews(batch_id: str):
-    batch = BATCHES.get(batch_id)
+    batch = load_batch(batch_id)
     if not batch:
         return error_response("Batch not found.", 404)
 
@@ -179,7 +270,7 @@ def analyze_reviews(batch_id: str):
         ],
     }
 
-    batch["analysis"] = response
+    persist_analysis(batch_id, response)
     return response
 
 
@@ -189,7 +280,7 @@ def analyze_reviews(batch_id: str):
     content_types=["application/json"],
 )
 def create_audio_summary(batch_id: str):
-    batch = BATCHES.get(batch_id)
+    batch = load_batch(batch_id)
     if not batch:
         return error_response("Batch not found.", 404)
 
@@ -231,6 +322,6 @@ def create_audio_summary(batch_id: str):
         "audio_file_id": upload_info["fileId"],
         "summary_text": summary_text,
     }
-    batch["audio_summary"] = response
+    persist_audio_summary(batch_id, response)
     return response
 

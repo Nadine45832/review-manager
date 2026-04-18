@@ -1,7 +1,7 @@
 import logging
 
-import boto3
 from botocore.exceptions import ClientError
+from chalicelib.aws_client_factory import aws_client
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class StorageService:
 
     def __init__(self, storage_location):
-        self.client = boto3.client("s3", "us-east-1")
+        self.client = aws_client("s3", region_name="us-east-1")
         self.bucket_name = storage_location
 
     def get_storage_location(self):

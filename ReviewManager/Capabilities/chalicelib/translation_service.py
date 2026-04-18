@@ -1,7 +1,7 @@
 import logging
 
-import boto3
 from botocore.exceptions import ClientError
+from chalicelib.aws_client_factory import aws_client
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class TranslationService:
 
     def __init__(self):
-        self.client = boto3.client("translate", "us-east-1")
+        self.client = aws_client("translate", region_name="us-east-1")
 
     def translate_text(
         self,
