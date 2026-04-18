@@ -6,8 +6,8 @@ import os
 
 from typing import Any, Dict, List
 
-import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+from chalicelib.aws_client_factory import aws_client
 from chalicelib.translation_service import TranslationService
 from chalice import Response
 
@@ -20,7 +20,7 @@ DEFAULT_TARGET_LANG = os.environ.get("DEFAULT_TARGET_LANG", "en")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 
 translation_service = TranslationService()
-comprehend_client = boto3.client("comprehend", region_name=AWS_REGION)
+comprehend_client = aws_client("comprehend", region_name=AWS_REGION)
 
 
 SUPPORTED_REVIEW_COLUMNS = [
