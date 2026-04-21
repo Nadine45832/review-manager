@@ -1,5 +1,4 @@
 import base64
-
 import logging
 import os
 import uuid
@@ -7,22 +6,20 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+from chalice import Chalice, Response
 from dotenv import load_dotenv
-load_dotenv()
 
 from chalicelib.aws_client_factory import aws_client
 from chalicelib.batch_store import BatchStore
-from chalice import Chalice, Response
 from chalicelib.storage_service import StorageService
 from chalicelib.translation_service import TranslationService
-from utils.helpers import (
-    extract_reviews_from_csv, error_response,
-    POLLY_VOICES, build_audio_summary_text,
-    normalize_lang_code, analyze_text,
-    prepare_review_record
-)
+from utils.helpers import (POLLY_VOICES, analyze_text,
+                           build_audio_summary_text, error_response,
+                           extract_reviews_from_csv, normalize_lang_code,
+                           prepare_review_record)
+
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,25 +37,7 @@ translation_service = TranslationService()
 polly_client = aws_client("polly", region_name=AWS_REGION)
 batch_store = BatchStore(DDB_TABLE_NAME, AWS_REGION) if DDB_TABLE_NAME else None
 
-# Simple in-memory store for the current runtime.
-# Good for local/dev use. For production, move this to DynamoDB or another DB.
 BATCHES: Dict[str, Dict[str, Any]] = {}
-
-# Optional DynamoDB persistence setup:
-# 1. Create a DynamoDB table and set its partition key to "id" (String).
-# 2. Add DDB_TABLE_NAME to your .env file with that table name.
-# 3. Make sure your AWS credentials/role can call GetItem, PutItem, and UpdateItem.
-# 4. Once that env var is present, the app will keep using BATCHES and will also
-#    mirror batch data into DynamoDB so batches survive server restarts.
-#
-# This keeps the current in-memory behavior in place and adds DynamoDB as an
-# extra persistence layer instead of replacing what the app already does.
-#
-# AWS credential loading note:
-# This app now builds its AWS clients from the values in this folder's .env
-# file when AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are present there. That
-# lets local development use the project .env instead of relying on
-# ~/.aws/credentials.
 
 
 def persist_batch(batch: Dict[str, Any]) -> None:
@@ -166,14 +145,11 @@ def index():
     }
 
 
-@app.route(
-    "/reviews/upload", methods=["POST"], content_types=["application/json"]
-)
+@app.route("/reviews/upload", methods=["POST"], content_types=["application/json"])
 def upload_reviews():
     payload = app.current_request.json_body or {}
 
-    target_lang = normalize_lang_code(payload.get(
-        "target_lang") or DEFAULT_TARGET_LANG)
+    target_lang = normalize_lang_code(payload.get("target_lang") or DEFAULT_TARGET_LANG)
     reviews: List[str] = []
     original_filename = payload.get("filename", "reviews.csv")
 
@@ -183,13 +159,12 @@ def upload_reviews():
             csv_bytes = base64.b64decode(payload["filebytes"])
         except Exception as exc:
             return error_response(f"Invalid base64 file payload: {exc}", 400)
+
         reviews = extract_reviews_from_csv(csv_bytes)
 
     elif isinstance(payload.get("reviews"), list):
         reviews = [
-            str(item).strip()
-            for item in payload["reviews"]
-            if str(item).strip()
+            str(item).strip() for item in payload["reviews"] if str(item).strip()
         ]
     else:
         return error_response(
@@ -197,11 +172,9 @@ def upload_reviews():
         )
 
     if not reviews:
-        return error_response(
-            "No reviews were found in the uploaded CSV file.", 400)
+        return error_response("No reviews were found in the uploaded CSV file.", 400)
 
-    translated_reviews = [
-        prepare_review_record(text, target_lang) for text in reviews]
+    translated_reviews = [prepare_review_record(text, target_lang) for text in reviews]
     batch_id = f"batch-{uuid.uuid4().hex}"
 
     batch = {
@@ -213,8 +186,7 @@ def upload_reviews():
     }
     persist_batch(batch)
 
-    logger.info(
-        "Created batch %s with %s reviews", batch_id, len(translated_reviews))
+    logger.info("Created batch %s with %s reviews", batch_id, len(translated_reviews))
     return {
         "batch_id": batch_id,
         "review_count": len(translated_reviews),
@@ -223,9 +195,7 @@ def upload_reviews():
 
 
 @app.route(
-    "/reviews/{batch_id}/analyze",
-    methods=["POST"],
-    content_types=["application/json"]
+    "/reviews/{batch_id}/analyze", methods=["POST"], content_types=["application/json"]
 )
 def analyze_reviews(batch_id: str):
     batch = load_batch(batch_id)
@@ -265,9 +235,7 @@ def analyze_reviews(batch_id: str):
             "mixed": summary_counter.get("MIXED", 0),
         },
         "results": results,
-        "key_phrases": [
-            phrase for phrase, _ in phrase_counter.most_common(20)
-        ],
+        "key_phrases": [phrase for phrase, _ in phrase_counter.most_common(20)],
     }
 
     persist_analysis(batch_id, response)
@@ -286,8 +254,7 @@ def create_audio_summary(batch_id: str):
 
     analysis = batch.get("analysis")
     if not analysis:
-        return error_response(
-            "Run analysis before generating the audio summary.", 400)
+        return error_response("Run analysis before generating the audio summary.", 400)
 
     payload = app.current_request.json_body or {}
     language_code = normalize_lang_code(
@@ -324,4 +291,3 @@ def create_audio_summary(batch_id: str):
     }
     persist_audio_summary(batch_id, response)
     return response
-
