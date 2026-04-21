@@ -68,7 +68,8 @@ AWS_SECRET_ACCESS_KEY=your_secret_key
 AWS_SESSION_TOKEN=optional_if_needed
 S3_BUCKET_NAME=your-s3-bucket-name
 DEFAULT_TARGET_LANG=en
-DDB_TABLE_NAME=hotel-review
+DDB_TABLE_NAME=ReviewManager_Table
+Create a DynamoDB table and set its partition key to "id" (String)
 ```
 
 Your S3 bucket must already exist, and your AWS user/role must have permission to use:
